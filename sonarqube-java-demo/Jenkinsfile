@@ -3,8 +3,6 @@ pipeline {
         label 'docker-worker-1'
     }
 
-    // Removed 'tools' block because Maven and JDK are pre-installed directly inside docker-worker-1
-
     environment {
         SONAR_HOST_URL = 'http://sonarqube:9000'
         SONAR_TOKEN    = credentials('sonar-token')
@@ -19,32 +17,38 @@ pipeline {
 
         stage('Compile') {
             steps {
-                sh 'mvn -B clean compile'
+                dir('sonarqube-java-demo') {
+                    sh 'mvn -B clean compile'
+                }
             }
         }
 
         stage('Unit Test and Coverage') {
             steps {
-                sh 'mvn -B verify'
+                dir('sonarqube-java-demo') {
+                    sh 'mvn -B verify'
+                }
             }
             post {
                 always {
-                    junit allowEmptyResults: true, testResults: 'target/surefire-reports/*.xml'
-                    archiveArtifacts allowEmptyArchive: true, artifacts: 'target/site/jacoco/**'
+                    junit allowEmptyResults: true, testResults: 'sonarqube-java-demo/target/surefire-reports/*.xml'
+                    archiveArtifacts allowEmptyArchive: true, artifacts: 'sonarqube-java-demo/target/site/jacoco/**'
                 }
             }
         }
 
         stage('SonarQube Analysis') {
             steps {
-                withSonarQubeEnv('SonarQube') {
-                    sh '''
-                        mvn -B sonar:sonar \
-                          -Dsonar.projectKey=sonarqube-demo \
-                          -Dsonar.projectName="SonarQube Demo" \
-                          -Dsonar.host.url=${SONAR_HOST_URL} \
-                          -Dsonar.token=${SONAR_TOKEN}
-                    '''
+                dir('sonarqube-java-demo') {
+                    withSonarQubeEnv('SonarQube') {
+                        sh '''
+                            mvn -B sonar:sonar \
+                              -Dsonar.projectKey=sonarqube-java-demo \
+                              -Dsonar.projectName="SonarQube Java Demo" \
+                              -Dsonar.host.url=${SONAR_HOST_URL} \
+                              -Dsonar.token=${SONAR_TOKEN}
+                        '''
+                    }
                 }
             }
         }
