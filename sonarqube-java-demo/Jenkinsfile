@@ -1,0 +1,65 @@
+pipeline {
+    agent {
+        label 'docker-worker-2'
+    }
+
+    tools {
+        jdk 'JDK17'
+        maven 'Maven3'
+    }
+
+    environment {
+        SONAR_HOST_URL = 'http://sonarqube:9000'
+    }
+
+    stages {
+        stage('Checkout') {
+            steps {
+                checkout scm
+            }
+        }
+
+        stage('Compile') {
+            steps {
+                sh 'mvn -B clean compile'
+            }
+        }
+
+        stage('Unit Test and Coverage') {
+            steps {
+                sh 'mvn -B verify'
+            }
+            post {
+                always {
+                    junit 'target/surefire-reports/*.xml'
+                    archiveArtifacts artifacts: 'target/site/jacoco/**', allowEmptyArchive: true
+                }
+            }
+        }
+
+        stage('SonarQube Analysis') {
+            steps {
+                withSonarQubeEnv('SonarQube') {
+                    sh '''
+                        mvn -B sonar:sonar                           -Dsonar.projectKey=sonarqube-java-demo                           -Dsonar.projectName=sonarqube-java-demo                           -Dsonar.host.url=${SONAR_HOST_URL}
+                    '''
+                }
+            }
+        }
+
+        // Optional: requires the SonarQube Quality Gate plugin and webhook.
+        // stage('Quality Gate') {
+        //     steps {
+        //         timeout(time: 5, unit: 'MINUTES') {
+        //             waitForQualityGate abortPipeline: true
+        //         }
+        //     }
+        // }
+    }
+
+    post {
+        always {
+            echo 'Build completed.'
+        }
+    }
+}
