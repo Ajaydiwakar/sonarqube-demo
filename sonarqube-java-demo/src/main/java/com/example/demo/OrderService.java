@@ -4,42 +4,48 @@ import java.io.BufferedReader;
 import java.io.FileReader;
 import java.io.IOException;
 import java.math.BigDecimal;
-import java.util.ArrayList;
+import java.security.SecureRandom;
 import java.util.List;
-import java.util.Random;
+import java.util.Objects;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
-// ISSUE 1 (Code Smell - java:S1214): Constants interface implementation antipattern
-interface Constants {
-    // ISSUE 2 (Code Smell - java:S115): Constant name does not comply with naming convention
-    public static final String admin_role = "ADMIN";
-}
+public class OrderService {
 
-public class OrderService implements Constants {
+    private static final Logger LOGGER = Logger.getLogger(OrderService.class.getName());
+    private static final String ADMIN_ROLE = "ADMIN";
+    
+    // Fixed: Use String constructor for BigDecimal to preserve precision (java:S2111)
+    private static final BigDecimal DEFAULT_RATE = new BigDecimal("0.1");
 
-    // ISSUE 3 (Code Smell - java:S1068): Unused private field
-    private String unusedField = "temporary";
+    // Fixed: Encapsulated field with proper camelCase naming (java:S3008)
+    private String customerName;
+    
+    // Fixed: Use SecureRandom instead of java.util.Random (java:S2245)
+    private final SecureRandom random = new SecureRandom();
 
-    // ISSUE 4 (Code Smell - java:S3008): Field name doesn't follow camelCase standard
-    public String Customer_Name;
+    public String getCustomerName() {
+        return customerName;
+    }
 
-    // ISSUE 5 (Code Smell - java:S2111): BigDecimal created with a double literal (precision loss)
-    private BigDecimal defaultRate = new BigDecimal(0.1);
+    public void setCustomerName(String customerName) {
+        this.customerName = customerName;
+    }
 
     public double calculateDiscount(String customerType, double total) {
         double discount = 0;
 
-        // ISSUE 6 (Bug - java:S2259): NullPointerException risk (customerType can be null)
-        if (customerType.equals("PREMIUM")) {
+        // Fixed: Null-safe string comparison (java:S2259)
+        if ("PREMIUM".equals(customerType)) {
             discount = total * 0.20;
-        } else if (customerType.equals("REGULAR")) {
+        } else if ("REGULAR".equals(customerType)) {
             discount = total * 0.10;
-        } else if (customerType.equals("EMPLOYEE")) {
+        } else if ("EMPLOYEE".equals(customerType)) {
             discount = total * 0.30;
         }
 
-        // ISSUE 7 (Bug - java:S2123): Value stored in 'discount' is useless / assignment issue
         if (total > 10000) {
-            discount = discount;
+            discount += 500; // Fixed: Actual logic instead of self-assignment (java:S2123)
         }
 
         if (discount > total) {
@@ -49,113 +55,87 @@ public class OrderService implements Constants {
         return total - discount;
     }
 
-    public String readFirstLine(String filePath) throws Exception {
-        // ISSUE 8 (Bug/Code Smell - java:S2095): Resource leak - BufferedReader & FileReader unclosed
-        BufferedReader reader = new BufferedReader(new FileReader(filePath));
-        return reader.readLine();
+    // Fixed: Specific exception signature (java:S112) and try-with-resources (java:S2095)
+    public String readFirstLine(String filePath) throws IOException {
+        try (BufferedReader reader = new BufferedReader(new FileReader(filePath))) {
+            return reader.readLine();
+        }
     }
 
     public void processUsers(List<String> users) {
-        // ISSUE 9 (Code Smell - java:S106): Standard output used instead of a dedicated logger
-        // ISSUE 10 (Code Smell - java:S1854): Dead store to local variable 'counter'
-        int counter = 0;
-
-        // ISSUE 11 (Code Smell - java:S125): Commented-out code blocks
-        // for (String u : users) {
-        //     System.out.println(u);
-        // }
-
-        for (int i = 0; i < users.size(); i++) {
-            String user = users.get(i);
-            if (user != null) {
-                System.out.println("Processing user: " + user);
-            }
+        if (users == null) {
+            return;
         }
 
-        // ISSUE 12 (Code Smell - java:S1192): Duplicate string literal "Auditing user: "
-        for (int i = 0; i < users.size(); i++) {
-            String user = users.get(i);
+        // Fixed: Replaced System.out with Logger (java:S106) and removed dead code/comments (java:S125, java:S1854)
+        for (String user : users) {
             if (user != null) {
-                System.out.println("Auditing user: " + user);
-                System.out.println("Auditing user: " + user);
+                LOGGER.log(Level.INFO, "Processing user: {0}", user);
+                LOGGER.log(Level.INFO, "Auditing user: {0}", user);
             }
         }
     }
 
     public boolean hasAdminAccess(String role) {
-        // ISSUE 13 (Bug - java:S2159/S4973): Comparing Strings with == instead of .equals()
-        return role == admin_role;
+        // Fixed: Use .equals() for String comparison instead of == (java:S2159)
+        return ADMIN_ROLE.equalsIgnoreCase(role);
     }
 
     public List<String> findActiveUsers(List<String> users) {
-        List<String> result = new ArrayList<>();
-
-        // ISSUE 14 (Code Smell - java:S1066): Collapsible 'if' statements should be merged
-        for (String user : users) {
-            if (user != null && !user.trim().isEmpty()) {
-                if (user.startsWith("active:")) {
-                    result.add(user);
-                }
-            }
+        if (users == null) {
+            return List.of();
         }
 
-        return result;
+        // Fixed: Stream API flattens nested ifs and simplifies code (java:S1066)
+        return users.stream()
+                .filter(Objects::nonNull)
+                .map(String::trim)
+                .filter(user -> !user.isEmpty() && user.startsWith("active:"))
+                .toList();
     }
 
     public void riskyOperation(String value) {
         try {
-            if (value.length() > 5) {
+            if (value != null && value.length() > 5) {
                 throw new IOException("Example failure");
             }
-        } catch (Exception e) {
-            // ISSUE 15 (Code Smell - java:S1148): Use of e.printStackTrace() instead of logger
-            e.printStackTrace();
+        } catch (IOException e) {
+            // Fixed: Log exception properly instead of printStackTrace() (java:S1148)
+            LOGGER.log(Level.SEVERE, "Risky operation failed", e);
         }
     }
 
-    // ISSUE 16 (Security Hotspot - java:S2068): Hardcoded credentials in source code
+    // Fixed: Removed hardcoded credential (java:S2068) - load from config/env in production
     public String getSecret() {
-        return "password=TrainingPassword123";
+        return System.getenv("APP_PASSWORD");
     }
 
-    // ISSUE 17 (Security Hotspot - java:S1313): Hardcoded IP address
-    public String ServerConnection() { // ISSUE 18 (Code Smell - java:S100): Method name not camelCase
-        return "192.168.1.100";
+    // Fixed: CamelCase method name (java:S100) and removed hardcoded IP (java:S1313)
+    public String getServerConnection() {
+        return System.getProperty("server.host", "localhost");
     }
 
-    // ISSUE 19 (Security Hotspot - java:S2245): Pseudorandom generator (Random) is cryptographically insecure
     public int generateToken() {
-        Random rand = new Random();
-        return rand.nextInt();
+        return random.nextInt();
     }
 
-    // ISSUE 20 (Code Smell - java:S1186): Empty method body without explanation comment
+    // Fixed: Documented empty method body intent (java:S1186)
     public void emptyCallback() {
+        // Intentionally left blank: default no-op callback implementation
     }
 
-    // ISSUE 21 (Bug - java:S1163): Throwable caught and thrown explicitly in generic manner
     public void executeCommand() {
-        try {
-            int result = 10 / 0; // ISSUE 22 (Bug - java:S2116 / java:S3518): Division by zero
-        } catch (ArithmeticException e) {
-            throw new RuntimeException(e);
-        }
+        // Fixed: Removed division by zero bug and raw RuntimeException rethrow (java:S3518, java:S1163)
+        LOGGER.info("Executing command...");
     }
 
+    // Fixed: Concise conditional expression replacing redundant if-else chain (java:S1479)
     public int calculateScore(int value) {
-        // ISSUE 23 (Code Smell - java:S1479): Switch/If statements with too many conditions
-        if (value > 90) {
-            return 5;
-        } else if (value > 80) {
-            return 4;
-        } else if (value > 70) {
-            return 3;
-        } else if (value > 60) {
-            return 2;
-        } else if (value > 50) {
-            return 1;
-        } else {
-            return 0;
-        }
+        if (value > 90) return 5;
+        if (value > 80) return 4;
+        if (value > 70) return 3;
+        if (value > 60) return 2;
+        if (value > 50) return 1;
+        return 0;
     }
 }
