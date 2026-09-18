@@ -1,15 +1,13 @@
 pipeline {
     agent {
-        label 'docker-worker-2'
+        label 'docker-worker-1'
     }
 
-    tools {
-        jdk 'JDK17'
-        maven 'Maven3'
-    }
+    // Removed 'tools' block because Maven and JDK are pre-installed directly inside docker-worker-1
 
     environment {
         SONAR_HOST_URL = 'http://sonarqube:9000'
+        SONAR_TOKEN    = credentials('sonar-token')
     }
 
     stages {
@@ -31,8 +29,8 @@ pipeline {
             }
             post {
                 always {
-                    junit 'target/surefire-reports/*.xml'
-                    archiveArtifacts artifacts: 'target/site/jacoco/**', allowEmptyArchive: true
+                    junit allowEmptyResults: true, testResults: 'target/surefire-reports/*.xml'
+                    archiveArtifacts allowEmptyArchive: true, artifacts: 'target/site/jacoco/**'
                 }
             }
         }
@@ -41,20 +39,23 @@ pipeline {
             steps {
                 withSonarQubeEnv('SonarQube') {
                     sh '''
-                        mvn -B sonar:sonar                           -Dsonar.projectKey=sonarqube-java-demo                           -Dsonar.projectName=sonarqube-java-demo                           -Dsonar.host.url=${SONAR_HOST_URL}
+                        mvn -B sonar:sonar \
+                          -Dsonar.projectKey=sonarqube-demo \
+                          -Dsonar.projectName="SonarQube Demo" \
+                          -Dsonar.host.url=${SONAR_HOST_URL} \
+                          -Dsonar.token=${SONAR_TOKEN}
                     '''
                 }
             }
         }
 
-        // Optional: requires the SonarQube Quality Gate plugin and webhook.
-        // stage('Quality Gate') {
-        //     steps {
-        //         timeout(time: 5, unit: 'MINUTES') {
-        //             waitForQualityGate abortPipeline: true
-        //         }
-        //     }
-        // }
+        stage('Quality Gate') {
+            steps {
+                timeout(time: 5, unit: 'MINUTES') {
+                    waitForQualityGate abortPipeline: true
+                }
+            }
+        }
     }
 
     post {
